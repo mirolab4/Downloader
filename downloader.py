@@ -1,125 +1,130 @@
-import logging
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from pytube import YouTube
+import os
+import re
 import requests
 from bs4 import BeautifulSoup
+from pytube import YouTube
+import telebot
 
-# إعداد التسجيل (Logging)
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+# استبدال 'YOUR_TELEGRAM_BOT_TOKEN' برمز البوت الخاص بك
+BOT_TOKEN = "7990298383:AAGLw9yIkYG28Q3pgguEKP7kBIQVjbRgC7I"
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# دالة تنزيل الفيديو من YouTube وإرساله مباشرة
-def send_youtube_video(url, update: Update):
-    try:
-        yt = YouTube(url)
-        video_stream = yt.streams.filter(file_extension='mp4').first()
-        video_url = video_stream.url  # الحصول على رابط مباشر للفيديو
-        update.message.reply_video(video=video_url)
-    except Exception as e:
-        update.message.reply_text(f"حدث خطأ أثناء إرسال الفيديو: {e}")
+# إنشاء مجلد لتخزين الفيديوهات والصور مؤقتًا
+if not os.path.exists("downloads"):
+    os.makedirs("downloads")
 
-# دالة إرسال الفيديو من TikTok مباشرة
-def send_tiktok_video(url, update: Update):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # استخراج رابط الفيديو من الصفحة
-        video_url = None
-        for script in soup.find_all('script'):
-            if 'videoData' in script.text:
-                match = re.search(r'"playAddr":"(https://[^"]+)"', script.text)
-                if match:
-                    video_url = match.group(1).replace("\\u002F", "/")
-                    break
-        
-        if not video_url:
-            raise Exception("لم يتم العثور على رابط الفيديو.")
-        
-        update.message.reply_video(video=video_url)
-    except Exception as e:
-        update.message.reply_text(f"حدث خطأ أثناء إرسال الفيديو: {e}")
+# دالة تنزيل الفيديو من YouTube
+def download_youtube_video(url):
+    yt = YouTube(url)
+    video_stream = yt.streams.filter(file_extension='mp4').first()
+    video_path = video_stream.download(output_path="downloads")
+    return video_path
 
-# دالة إرسال المحتوى (فيديو أو صورة) من Twitter مباشرة
-def send_twitter_media(url, update: Update):
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # استخراج رابط الفيديو أو الصورة
-        media_url = None
-        media_type = None
-        
-        # البحث عن رابط الفيديو
-        video_tag = soup.find("video")
-        if video_tag:
-            media_url = video_tag['src']
-            media_type = 'video'
-        else:
-            # البحث عن رابط الصورة
-            image_tag = soup.find("img", {"alt": "Image"})
-            if image_tag:
-                media_url = image_tag['src']
-                media_type = 'photo'
-        
-        if not media_url:
-            raise Exception("لم يتم العثور على محتوى (فيديو أو صورة).")
-        
-        if media_type == 'video':
-            update.message.reply_video(video=media_url)
-        elif media_type == 'photo':
-            update.message.reply_photo(photo=media_url)
-    except Exception as e:
-        update.message.reply_text(f"حدث خطأ أثناء إرسال المحتوى: {e}")
+# دالة تنزيل الفيديو من TikTok
+def download_tiktok_video(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # استخراج رابط الفيديو من الصفحة
+    video_url = None
+    for script in soup.find_all('script'):
+        if 'videoData' in script.text:
+            match = re.search(r'"playAddr":"(https://[^"]+)"', script.text)
+            if match:
+                video_url = match.group(1).replace("\\u002F", "/")
+                break
+    
+    if not video_url:
+        raise Exception("لم يتم العثور على رابط الفيديو.")
+    
+    video_path = "downloads/tiktok_video.mp4"
+    video_response = requests.get(video_url, headers=headers)
+    with open(video_path, "wb") as f:
+        f.write(video_response.content)
+    return video_path
+
+# دالة تنزيل المحتوى (فيديو أو صورة) من Twitter
+def download_twitter_media(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # استخراج رابط الفيديو أو الصورة
+    media_url = None
+    media_type = None
+    
+    # البحث عن رابط الفيديو
+    video_tag = soup.find("video")
+    if video_tag:
+        media_url = video_tag['src']
+        media_type = 'video'
+    else:
+        # البحث عن رابط الصورة
+        image_tag = soup.find("img", {"alt": "Image"})
+        if image_tag:
+            media_url = image_tag['src']
+            media_type = 'photo'
+    
+    if not media_url:
+        raise Exception("لم يتم العثور على محتوى (فيديو أو صورة).")
+    
+    # تنزيل المحتوى
+    media_path = f"downloads/twitter_{media_type}.{'mp4' if media_type == 'video' else 'jpg'}"
+    media_response = requests.get(media_url, headers=headers)
+    with open(media_path, "wb") as f:
+        f.write(media_response.content)
+    
+    return media_path, media_type
 
 # دالة البدء
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('مرحبًا! أرسل لي رابط الفيديو أو الصورة من YouTube أو TikTok أو Twitter وسأقوم بإرساله لك مباشرة.')
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, 'مرحبًا! أرسل لي رابط الفيديو أو الصورة من YouTube أو TikTok أو Twitter وسأقوم بتنزيله لك.')
 
 # دالة التعامل مع الرسائل النصية
-def handle_message(update: Update, context: CallbackContext) -> None:
-    url = update.message.text
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    url = message.text
     if 'youtube.com' in url or 'youtu.be' in url:
-        update.message.reply_text("جارٍ إرسال الفيديو من YouTube...")
-        send_youtube_video(url, update)
+        try:
+            bot.reply_to(message, "جارٍ تنزيل الفيديو من YouTube...")
+            video_path = download_youtube_video(url)
+            with open(video_path, 'rb') as video_file:
+                bot.send_video(message.chat.id, video_file)
+            os.remove(video_path)
+        except Exception as e:
+            bot.reply_to(message, f"حدث خطأ أثناء تنزيل الفيديو: {e}")
     elif 'tiktok.com' in url:
-        update.message.reply_text("جارٍ إرسال الفيديو من TikTok...")
-        send_tiktok_video(url, update)
+        try:
+            bot.reply_to(message, "جارٍ تنزيل الفيديو من TikTok...")
+            video_path = download_tiktok_video(url)
+            with open(video_path, 'rb') as video_file:
+                bot.send_video(message.chat.id, video_file)
+            os.remove(video_path)
+        except Exception as e:
+            bot.reply_to(message, f"حدث خطأ أثناء تنزيل الفيديو: {e}")
     elif 'twitter.com' in url:
-        update.message.reply_text("جارٍ إرسال المحتوى من Twitter...")
-        send_twitter_media(url, update)
+        try:
+            bot.reply_to(message, "جارٍ تنزيل المحتوى من Twitter...")
+            media_path, media_type = download_twitter_media(url)
+            if media_type == 'video':
+                with open(media_path, 'rb') as video_file:
+                    bot.send_video(message.chat.id, video_file)
+            elif media_type == 'photo':
+                with open(media_path, 'rb') as photo_file:
+                    bot.send_photo(message.chat.id, photo_file)
+            os.remove(media_path)
+        except Exception as e:
+            bot.reply_to(message, f"حدث خطأ أثناء تنزيل المحتوى: {e}")
     else:
-        update.message.reply_text("الرابط غير مدعوم. يرجى إرسال رابط فيديو أو صورة من YouTube أو TikTok أو Twitter.")
+        bot.reply_to(message, "الرابط غير مدعوم. يرجى إرسال رابط فيديو أو صورة من YouTube أو TikTok أو Twitter.")
 
-# دالة الأخطاء
-def error(update: Update, context: CallbackContext) -> None:
-    logger.warning('Update "%s" caused error "%s"', update, context.error)
-
-def main() -> None:
-    # استبدال 'YOUR_TELEGRAM_BOT_TOKEN' برمز البوت الخاص بك
-    updater = Updater("7990298383:AAGLw9yIkYG28Q3pgguEKP7kBIQVjbRgC7I")
-
-    dispatcher = updater.dispatcher
-
-    # إضافة المعالجات
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-
-    # إضافة معالج الأخطاء
-    dispatcher.add_error_handler(error)
-
-    # بدء البوت
-    updater.start_polling()
-
-    # تشغيل البوت حتى يتم إيقافه يدويًا
-    updater.idle()
-
+# تشغيل البوت
 if __name__ == '__main__':
-    main()
+    print("البوت يعمل...")
+    bot.polling()

@@ -104,7 +104,7 @@ def error(update: Update, context: CallbackContext) -> None:
 
 def main() -> None:
     # استبدال 'YOUR_TELEGRAM_BOT_TOKEN' برمز البوت الخاص بك
-    updater = Updater("YOUR_TELEGRAM_BOT_TOKEN")
+    updater = Updater("7990298383:AAGLw9yIkYG28Q3pgguEKP7kBIQVjbRgC7I")
 
     dispatcher = updater.dispatcher
 

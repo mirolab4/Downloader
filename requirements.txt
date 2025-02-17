@@ -1,4 +1,4 @@
-python-telegram-bot
-pytube3
+pyTelegramBotAPI
+pytube
 requests
 beautifulsoup4
